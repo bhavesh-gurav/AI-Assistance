@@ -86,7 +86,11 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if not settings.is_configured:
-        print("⚠ GEMINI_API_KEY is not set. Copy .env.example to .env and add your key.")
+        print(
+            "⚠ No AI model is configured. Copy .env.example to .env and add a "
+            "GEMINI_API_KEY, OPENAI_API_KEY or DEEPSEEK_API_KEY. "
+            "Without one, only local commands work."
+        )
 
     if args.voice:
         run_voice()

@@ -57,7 +57,7 @@ class GeminiService:
         *,
         json_mode: bool,
     ) -> str:
-        if not settings.is_configured:
+        if not settings.gemini_configured:
             raise GeminiError("GEMINI_API_KEY is not set. Add it to your .env file.")
 
         url = f"{settings.gemini_base_url}/models/{settings.gemini_model}:generateContent"

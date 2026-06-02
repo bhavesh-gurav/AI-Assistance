@@ -303,7 +303,11 @@ class JarvisApp:
                       fg_color="#5a1d1d", hover_color="#7a2727").pack(side="right")
 
         if not settings.is_configured:
-            self._append("system", "⚠ GEMINI_API_KEY not set. Local commands work; AI answers need a key.")
+            self._append(
+                "system",
+                "⚠ No AI model configured. Local commands work; AI answers need a "
+                "Gemini, OpenAI or DeepSeek key in .env.",
+            )
 
     def _on_canvas_resize(self, event) -> None:  # noqa: ANN001
         if event.width > 100 and event.height > 100:

@@ -20,7 +20,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from app.ai.gemini_service import GeminiError, GeminiService
+from app.ai.model_router import ModelRouter
+from app.ai.providers import LLMError
 from app.config.logger import get_logger
 
 logger = get_logger(__name__)
@@ -40,8 +41,8 @@ _KNOWN_APPS = [
 class IntentEngine:
     """Classifies utterances and produces routable intent dicts."""
 
-    def __init__(self, gemini: GeminiService) -> None:
-        self.gemini = gemini
+    def __init__(self, router: ModelRouter) -> None:
+        self.router = router
 
     def route(
         self,
@@ -58,14 +59,23 @@ class IntentEngine:
             logger.debug("Local rule matched: %s", local.get("action"))
             return local
 
-        # Fall back to the LLM brain.
-        try:
-            result = self.gemini.route(text, history or [], memory_context)
-            return self._normalise(result)
-        except GeminiError as exc:
-            logger.warning("Gemini routing unavailable: %s", exc)
+        # No AI model configured at all -> stay in local/offline mode.
+        if not self.router.any_available:
+            logger.info("No AI model configured; using local-only handling.")
             return self._chat(
-                "My AI brain is unavailable right now because Gemini denied the request. "
+                "I don't have an AI model connected right now, so I'm running in local mode. "
+                "I can still open apps, control the system, search the web and manage files. "
+                "Add a Gemini, OpenAI or DeepSeek API key to your .env to enable full answers."
+            )
+
+        # Fall back to the LLM brain (tries each configured model in order).
+        try:
+            result = self.router.route(text, history or [], memory_context)
+            return self._normalise(result)
+        except LLMError as exc:
+            logger.warning("All AI models unavailable: %s", exc)
+            return self._chat(
+                "My AI models are all unavailable right now, so I've switched to local mode. "
                 "I can still open apps, control the system, search the web and manage files."
             )
 

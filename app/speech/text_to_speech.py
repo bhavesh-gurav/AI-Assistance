@@ -6,10 +6,17 @@ that thread must have COM initialised. The assistant speaks from background
 threads (voice loop / UI worker), so we run a single dedicated speech thread
 that owns the engine and processes a queue. ``speak`` blocks until the phrase
 finishes so the microphone doesn't record the assistant's own voice.
+
+Why a fresh engine per phrase: SAPI5 has a long-standing bug where reusing one
+pyttsx3 engine across repeated ``runAndWait()`` calls speaks the first phrase
+and then silently hangs (the internal run-loop never restarts). Building a new
+engine for each utterance — and forcing pyttsx3 to forget the cached one with a
+GC pass — keeps the assistant talking on every turn.
 """
 
 from __future__ import annotations
 
+import gc
 import queue
 import threading
 
@@ -55,11 +62,10 @@ class TextToSpeech:
         except Exception:
             pass
 
+        # Verify we can build an engine at least once before reporting ready.
         try:
-            engine = pyttsx3.init()
-            engine.setProperty("rate", settings.tts_rate)
-            if settings.tts_voice:
-                self._select_voice(engine, settings.tts_voice)
+            probe = self._make_engine()
+            self._dispose(probe)
             self._ok = True
         except Exception:
             logger.exception("Failed to initialise TTS engine")
@@ -74,8 +80,7 @@ class TextToSpeech:
                 break
             text, done = item
             try:
-                engine.say(text)
-                engine.runAndWait()
+                self._speak_once(text)
             except Exception:
                 logger.exception("TTS playback failed")
                 print(f"[{settings.assistant_name}] {text}")
@@ -83,10 +88,37 @@ class TextToSpeech:
                 if done is not None:
                     done.set()
 
+    def _speak_once(self, text: str) -> None:
+        """Speak a single phrase with its own short-lived engine."""
+        engine = self._make_engine()
+        try:
+            engine.say(text)
+            engine.runAndWait()
+        finally:
+            self._dispose(engine)
+
+    @staticmethod
+    def _make_engine():
+        engine = pyttsx3.init()
+        engine.setProperty("rate", settings.tts_rate)
+        if settings.tts_voice:
+            TextToSpeech._select_voice(engine, settings.tts_voice)
+        return engine
+
+    @staticmethod
+    def _dispose(engine) -> None:
+        """Tear an engine down so the next ``pyttsx3.init()`` returns a fresh one.
+
+        pyttsx3 caches engines in a weak-value registry keyed by driver name, so
+        a lingering reference would hand us the same (stuck) engine again. We
+        stop it, drop the reference and force a GC pass to clear the registry.
+        """
         try:
             engine.stop()
         except Exception:
             pass
+        del engine
+        gc.collect()
 
     @staticmethod
     def _select_voice(engine, needle: str) -> None:

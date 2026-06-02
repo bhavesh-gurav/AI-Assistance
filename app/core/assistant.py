@@ -16,7 +16,7 @@ import re
 import threading
 from typing import Any, Callable
 
-from app.ai.gemini_service import GeminiService
+from app.ai.model_router import ModelRouter
 from app.ai.prompt_manager import PromptManager
 from app.automation.browser_controller import BrowserController
 from app.automation.cursor_controller import CursorController
@@ -41,14 +41,14 @@ class Assistant:
     def __init__(self) -> None:
         # AI + persistence
         self.prompts = PromptManager()
-        self.gemini = GeminiService(self.prompts)
+        self.router = ModelRouter(self.prompts)
         self.db = SQLiteManager(settings.database_path)
         self.memory = MemoryService(self.db)
         self.conversation = ConversationMemory()
         self.conversation.seed(self.memory.recent_turns(settings.conversation_window))
 
         # Routing + controllers
-        self.intent_engine = IntentEngine(self.gemini)
+        self.intent_engine = IntentEngine(self.router)
         self.desktop = DesktopController()
         self.system = SystemController()
         self.browser = BrowserController()

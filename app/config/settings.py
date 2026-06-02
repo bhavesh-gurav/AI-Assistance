@@ -63,9 +63,23 @@ def _get_optional_int(name: str) -> int | None:
         return None
 
 
+def _get_csv(name: str, default: str) -> tuple[str, ...]:
+    """Read a comma-separated list, lower-cased and stripped of blanks."""
+    raw = os.getenv(name, default)
+    items = [part.strip().lower() for part in raw.split(",")]
+    return tuple(item for item in items if item)
+
+
 @dataclass(frozen=True)
 class Settings:
     """Immutable runtime configuration."""
+
+    # --- AI: model fallback order ---
+    # Comma-separated provider priority. The router tries them left-to-right and
+    # uses the first one that is configured AND reachable. e.g. "gemini,openai,deepseek".
+    llm_provider_order: tuple[str, ...] = field(
+        default_factory=lambda: _get_csv("LLM_PROVIDER_ORDER", "gemini,openai,deepseek")
+    )
 
     # --- Gemini / AI ---
     gemini_api_key: str = field(default_factory=lambda: os.getenv("GEMINI_API_KEY", "").strip())
@@ -75,6 +89,21 @@ class Settings:
             "GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta"
         ).rstrip("/")
     )
+
+    # --- OpenAI (and any OpenAI-compatible endpoint) ---
+    openai_api_key: str = field(default_factory=lambda: os.getenv("OPENAI_API_KEY", "").strip())
+    openai_model: str = field(default_factory=lambda: os.getenv("OPENAI_MODEL", "gpt-4o-mini").strip())
+    openai_base_url: str = field(
+        default_factory=lambda: os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1").rstrip("/")
+    )
+
+    # --- DeepSeek (OpenAI-compatible API) ---
+    deepseek_api_key: str = field(default_factory=lambda: os.getenv("DEEPSEEK_API_KEY", "").strip())
+    deepseek_model: str = field(default_factory=lambda: os.getenv("DEEPSEEK_MODEL", "deepseek-chat").strip())
+    deepseek_base_url: str = field(
+        default_factory=lambda: os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1").rstrip("/")
+    )
+
     request_timeout_seconds: int = field(default_factory=lambda: _get_int("REQUEST_TIMEOUT_SECONDS", 60))
     temperature: float = field(default_factory=lambda: _get_float("GEMINI_TEMPERATURE", 0.3))
 
@@ -109,7 +138,11 @@ class Settings:
 
     @property
     def is_configured(self) -> bool:
-        """Whether a Gemini API key has been provided."""
+        """Whether at least one AI provider has an API key configured."""
+        return bool(self.gemini_api_key or self.openai_api_key or self.deepseek_api_key)
+
+    @property
+    def gemini_configured(self) -> bool:
         return bool(self.gemini_api_key)
 
 
